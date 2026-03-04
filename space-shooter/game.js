@@ -69,14 +69,14 @@ class GameScene extends Phaser.Scene {
     this.bossHpBg        = null;
     this.bossHpBar       = null;
     this.bossDefeated    = false;
+    this.bossFireCount   = 0;
 
     // Player stats
     this.playerSpeed = 280;
-    this.speedTimer  = null;
     this.powerTimer  = null;
 
     // ── Audio context ────────────────────────
-    this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    this.audioCtx = window.gameAudioCtx;
 
     // ── Background ──────────────────────────
     this.bg = this.add.tileSprite(0, 0, W, H, 'bg').setOrigin(0, 0);
@@ -137,35 +137,41 @@ class GameScene extends Phaser.Scene {
 
   // ── Audio helpers ───────────────────────────
   playLaserSound() {
-    const ctx = this.audioCtx;
-    const osc  = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(880, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(110, ctx.currentTime + 0.15);
-    gain.gain.setValueAtTime(0.3, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.15);
+    try {
+      const ctx = window.gameAudioCtx;
+      if (!ctx) return;
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(110, ctx.currentTime + 0.15);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.15);
+    } catch (_) {}
   }
 
   playExplosionSound(large) {
-    const ctx  = this.audioCtx;
-    const osc  = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.type = 'sawtooth';
-    const freq = large ? 120 : 220;
-    const dur  = large ? 0.5  : 0.2;
-    osc.frequency.setValueAtTime(freq, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(30, ctx.currentTime + dur);
-    gain.gain.setValueAtTime(0.4, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + dur);
+    try {
+      const ctx = window.gameAudioCtx;
+      if (!ctx) return;
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sawtooth';
+      const freq = large ? 120 : 220;
+      const dur  = large ? 0.5  : 0.2;
+      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(30, ctx.currentTime + dur);
+      gain.gain.setValueAtTime(0.4, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + dur);
+    } catch (_) {}
   }
 
   // ── Wave state machine ──────────────────────
@@ -187,10 +193,9 @@ class GameScene extends Phaser.Scene {
       repeat: cfg.enemiesPerWave - 1
     });
 
-    // Enemy fire timer (rate increases each level)
-    const enemyFireDelay = Math.max(2500 - this.currentLevel * 400, 800);
+    // Enemy fire timer (rate from level config)
     this.enemyFireTimer = this.time.addEvent({
-      delay: enemyFireDelay,
+      delay: cfg.enemyFireRate,
       callback: this.enemyFire,
       callbackScope: this,
       loop: true
@@ -206,11 +211,19 @@ class GameScene extends Phaser.Scene {
     const enemy = this.enemies.create(x, -30, key);
     enemy.setVelocityY(cfg.enemySpeed);
     enemy.setDepth(1);
+
+    // Zigzag enemies at level 5+ (25% chance)
+    if (this.currentLevel >= 4 && Math.random() < 0.25) {
+      enemy.isZigzag = true;
+      enemy.zigzagOriginX = x;
+      enemy.zigzagPhase = Math.random() * Math.PI * 2;
+    }
+
     this.waveSpawned++;
   }
 
   onWaveCleared() {
-    if (this.gameOver) return;
+    if (this.gameOver || !this.waveActive) return;
     // Stop spawn timer to prevent ghost enemies
     if (this.waveTimer) { this.waveTimer.remove(); this.waveTimer = null; }
     // Stop enemy fire timer
@@ -271,9 +284,9 @@ class GameScene extends Phaser.Scene {
     this.score += 10;
     this.scoreTxt.setText('SCORE: ' + this.score);
 
-    // 20% chance to drop a power-up
+    // 20% chance to drop a power-up (fire rate boost only)
     if (Phaser.Math.Between(1, 5) === 1) {
-      const type = Math.random() < 0.5 ? 'powerupSpeed' : 'powerupPower';
+      const type = 'powerupPower';
       const drop = this.powerups.create(ex, ey, type);
       drop.setVelocityY(110);
       drop.setDepth(1);
@@ -321,24 +334,8 @@ class GameScene extends Phaser.Scene {
   // ── Power-up collection ─────────────────────
   collectPowerup(player, drop) {
     if (!drop.active) return;
-    const type = drop.powerupType;
     drop.destroy();
-    if (type === 'powerupSpeed') {
-      this.activateSpeedBoost();
-    } else {
-      this.activatePowerBoost();
-    }
-  }
-
-  activateSpeedBoost() {
-    if (this.speedTimer) this.speedTimer.remove();
-    this.playerSpeed = 400;
-    this.updatePowerupHUD();
-    this.speedTimer = this.time.delayedCall(6000, () => {
-      this.playerSpeed = 280;
-      this.speedTimer = null;
-      this.updatePowerupHUD();
-    });
+    this.activatePowerBoost();
   }
 
   activatePowerBoost() {
@@ -353,10 +350,7 @@ class GameScene extends Phaser.Scene {
   }
 
   updatePowerupHUD() {
-    const parts = [];
-    if (this.speedTimer) parts.push('⚡SPEED');
-    if (this.powerTimer) parts.push('🔥POWER');
-    this.powerupTxt.setText(parts.join('  '));
+    this.powerupTxt.setText(this.powerTimer ? '🔥POWER' : '');
   }
 
   // ── Spawn explosion sprite ──────────────────
@@ -401,6 +395,7 @@ class GameScene extends Phaser.Scene {
 
   spawnBoss() {
     const W = this.scale.width;
+    const cfg = LEVELS[this.currentLevel];
 
     // Use a group so the overlap is group-vs-group (standard Phaser pattern)
     this.bossGroup = this.physics.add.group();
@@ -408,7 +403,7 @@ class GameScene extends Phaser.Scene {
       .setDepth(1)
       .setScale(1.5);
     this.boss.body.setImmovable(true);
-    this.boss.hp    = 10 + this.currentLevel * 15;
+    this.boss.hp    = cfg.bossHp;
     this.boss.maxHp = this.boss.hp;
 
     // Fly in to y=120
@@ -429,9 +424,8 @@ class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.lasers, this.bossGroup, this.hitBoss, null, this);
 
     // Boss fires red lasers periodically
-    const fireDelay = Math.max(1800 - this.currentLevel * 300, 800);
     this.bossFireTimer = this.time.addEvent({
-      delay: fireDelay,
+      delay: cfg.bossFireRate,
       callback: this.bossFire,
       callbackScope: this,
       loop: true
@@ -452,6 +446,22 @@ class GameScene extends Phaser.Scene {
 
   bossFire() {
     if (!this.boss || !this.boss.active) return;
+    this.bossFireCount++;
+
+    // Level 7: alternate spread shot and aimed shot
+    if (this.currentLevel === 6 && this.bossFireCount % 2 === 0) {
+      // Aimed shot directed at player's current x
+      const laser = this.enemyLasers.create(this.boss.x, this.boss.y + 40, 'laserRed');
+      const dx = this.player.x - this.boss.x;
+      const dy = this.player.y - this.boss.y;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+      const speed = 350;
+      laser.setVelocity((dx / dist) * speed, (dy / dist) * speed);
+      laser.setDepth(1);
+      return;
+    }
+
+    // Default: spread shot (3 lasers)
     const offsets = [-30, 0, 30];
     offsets.forEach(offset => {
       const laser = this.enemyLasers.create(
@@ -560,8 +570,6 @@ class GameScene extends Phaser.Scene {
     // ── Shooting ─────────────────────────────
     const shouldFire = isTouching || this.cursors.space.isDown;
     if (shouldFire && time - this.lastShot > this.shotDelay) {
-      // Resume AudioContext on first user gesture
-      if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
       this.fireLaser();
     }
 
@@ -578,6 +586,11 @@ class GameScene extends Phaser.Scene {
 
     this.enemies.getChildren().forEach(e => {
       if (!e.active) return;
+      if (e.isZigzag && e.body) {
+        const newX = e.zigzagOriginX + Math.sin(time / 600 + e.zigzagPhase) * 40;
+        e.x = newX;
+        e.body.x = newX - e.body.halfWidth;
+      }
       if (e.y > H + 40) {
         e.destroy();
         if (this.waveActive) {
@@ -709,19 +722,35 @@ class GameOverScene extends Phaser.Scene {
   }
 }
 
+// Shared AudioContext — unlocked on first touch via silent buffer (required on iOS Safari)
+window.gameAudioCtx = null;
+document.addEventListener('touchstart', () => {
+  if (!window.gameAudioCtx) {
+    window.gameAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    // iOS requires scheduling actual audio output during the gesture to unlock the context
+    const buf = window.gameAudioCtx.createBuffer(1, 1, 22050);
+    const src = window.gameAudioCtx.createBufferSource();
+    src.buffer = buf;
+    src.connect(window.gameAudioCtx.destination);
+    src.start(0);
+  } else if (window.gameAudioCtx.state === 'suspended') {
+    window.gameAudioCtx.resume();
+  }
+}, { passive: true });
+
 // ── Phaser Game Config ────────────────────────
 const config = {
   type: Phaser.AUTO,
-  width: 390,
-  height: 844,
+  width: window.innerWidth,
+  height: window.innerHeight,
   backgroundColor: '#000011',
   physics: {
     default: 'arcade',
     arcade: { gravity: { y: 0 }, debug: false }
   },
   scale: {
-    mode: Phaser.Scale.FIT,
-    autoCenter: Phaser.Scale.CENTER_BOTH,
+    mode: Phaser.Scale.NONE,
+    autoCenter: Phaser.Scale.NO_CENTER,
   },
   scene: [BootScene, GameScene, LevelClearScene, VictoryScene, GameOverScene]
 };

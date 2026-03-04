@@ -74,3 +74,14 @@ test('Case 4 — Lasers fire when Space key is held', async ({ page }) => {
 
   expect(laserCount).toBeGreaterThan(0);
 });
+
+test('Case 5 — Canvas width matches window.innerWidth', async ({ page }) => {
+  await page.goto('/');
+  await waitForScene(page);
+
+  const canvas = page.locator('canvas');
+  const box = await canvas.boundingBox();
+  const viewportWidth = await page.evaluate(() => window.innerWidth);
+
+  expect(box.width).toBe(viewportWidth);
+});
