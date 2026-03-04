@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<!--
+  Run this file once in a browser to generate placeholder PNG assets.
+  It draws sprites on canvas elements and offers download links.
+  Save each PNG into assets/images/ with the filename shown.
+
+  OR just open index.html — it will use these generated assets automatically
+  if you place this file's output PNGs in assets/images/.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Asset Generator</title>
+<style>
+  body { background:#111; color:#eee; font-family:monospace; padding:20px; }
+  canvas { border:1px solid #444; margin:4px; }
+  .group { margin-bottom:20px; }
+  h2 { color:#44aaff; }
+  a { color:#aaffaa; display:block; margin:2px 0; }
+</style>
+</head>
+<body>
+<h1>Space Shooter — Asset Generator</h1>
+<p>Click each link to download the PNG, then save it to <code>assets/images/</code>.</p>
+
+<script>
+function makeCanvas(w, h) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  return c;
+}
+
+function downloadCanvas(canvas, filename) {
+  const a = document.createElement('a');
+  a.href = canvas.toDataURL('image/png');
+  a.download = filename;
+  a.textContent = '⬇ Download ' + filename;
+  document.body.appendChild(a);
+}
+
+// ── Background tile (64×64 dark purple with stars) ──────────────────────
+(function() {
+  const c = makeCanvas(64, 64);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#0d0018';
+  ctx.fillRect(0,0,64,64);
+  ctx.fillStyle = '#ffffff';
+  [[5,10],[20,45],[40,8],[55,30],[12,55],[35,20],[50,50],[28,35]].forEach(([x,y]) => {
+    ctx.fillRect(x,y,1,1);
+  });
+  ctx.fillStyle = '#aaaaff';
+  [[15,25],[48,15]].forEach(([x,y]) => { ctx.fillRect(x,y,2,2); });
+  downloadCanvas(c, 'darkPurple.png');
+})();
+
+// ── Player ship (48×48 blue) ─────────────────────────────────────────────
+(function() {
+  const c = makeCanvas(48, 64);
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0,0,48,64);
+  // Body
+  ctx.fillStyle = '#2288ff';
+  ctx.beginPath();
+  ctx.moveTo(24, 0);
+  ctx.lineTo(42, 50);
+  ctx.lineTo(24, 42);
+  ctx.lineTo(6,  50);
+  ctx.closePath();
+  ctx.fill();
+  // Cockpit
+  ctx.fillStyle = '#aaddff';
+  ctx.beginPath();
+  ctx.ellipse(24, 26, 7, 10, 0, 0, Math.PI*2);
+  ctx.fill();
+  // Engine glow
+  ctx.fillStyle = '#ff8800';
+  ctx.beginPath();
+  ctx.ellipse(24, 50, 6, 4, 0, 0, Math.PI*2);
+  ctx.fill();
+  downloadCanvas(c, 'playerShip1_blue.png');
+})();
+
+// ── Enemy ships ──────────────────────────────────────────────────────────
+function drawEnemy(color, variant) {
+  const c = makeCanvas(48, 42);
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0,0,48,42);
+  ctx.fillStyle = color;
+  // Different shapes per variant
+  if (variant === 1) {
+    ctx.beginPath();
+    ctx.moveTo(24,42); ctx.lineTo(4,10); ctx.lineTo(24,18); ctx.lineTo(44,10);
+    ctx.closePath(); ctx.fill();
+  } else if (variant === 2) {
+    ctx.beginPath();
+    ctx.moveTo(24,42); ctx.lineTo(0,15); ctx.lineTo(12,0); ctx.lineTo(36,0); ctx.lineTo(48,15);
+    ctx.closePath(); ctx.fill();
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(24,42); ctx.lineTo(2,20); ctx.lineTo(10,2); ctx.lineTo(38,2); ctx.lineTo(46,20);
+    ctx.closePath(); ctx.fill();
+  }
+  // Engine dots
+  ctx.fillStyle = '#ff4444';
+  ctx.beginPath(); ctx.arc(24, 36, 4, 0, Math.PI*2); ctx.fill();
+  return c;
+}
+downloadCanvas(drawEnemy('#cc2222', 1), 'enemyBlack1.png');
+downloadCanvas(drawEnemy('#882222', 2), 'enemyBlack2.png');
+downloadCanvas(drawEnemy('#aa1111', 3), 'enemyBlack3.png');
+
+// ── Lasers ───────────────────────────────────────────────────────────────
+(function() {
+  const c = makeCanvas(8, 32);
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0,0,8,32);
+  const g = ctx.createLinearGradient(0,0,0,32);
+  g.addColorStop(0,'#aaddff'); g.addColorStop(0.5,'#0088ff'); g.addColorStop(1,'transparent');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.ellipse(4,16,3,15,0,0,Math.PI*2); ctx.fill();
+  downloadCanvas(c, 'laserBlue01.png');
+})();
+
+(function() {
+  const c = makeCanvas(8, 32);
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0,0,8,32);
+  const g = ctx.createLinearGradient(0,0,0,32);
+  g.addColorStop(0,'#ffaaaa'); g.addColorStop(0.5,'#ff2200'); g.addColorStop(1,'transparent');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.ellipse(4,16,3,15,0,0,Math.PI*2); ctx.fill();
+  downloadCanvas(c, 'laserRed01.png');
+})();
+
+// ── Explosion spritesheet (9 frames × 64px) ──────────────────────────────
+(function() {
+  const frames = 9;
+  const fw = 64, fh = 64;
+  const c = makeCanvas(fw * frames, fh);
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0,0,c.width,c.height);
+  for (let i = 0; i < frames; i++) {
+    const progress = i / (frames - 1);
+    const x = i * fw + fw/2, y = fh/2;
+    const maxR = 28;
+    const r = maxR * Math.sin(progress * Math.PI);   // grows then shrinks
+    const alpha = 1 - progress * 0.7;
+
+    // Outer fire ring
+    const g1 = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g1.addColorStop(0,   `rgba(255,255,200,${alpha})`);
+    g1.addColorStop(0.3, `rgba(255,160,0,${alpha})`);
+    g1.addColorStop(0.7, `rgba(200,40,0,${alpha * 0.8})`);
+    g1.addColorStop(1,   `rgba(80,0,0,0)`);
+    ctx.fillStyle = g1;
+    ctx.beginPath(); ctx.arc(x, y, Math.max(r,1), 0, Math.PI*2); ctx.fill();
+
+    // Bright core
+    if (r > 4) {
+      const g2 = ctx.createRadialGradient(x, y, 0, x, y, r * 0.4);
+      g2.addColorStop(0, `rgba(255,255,255,${alpha})`);
+      g2.addColorStop(1, `rgba(255,220,100,0)`);
+      ctx.fillStyle = g2;
+      ctx.beginPath(); ctx.arc(x, y, r * 0.4, 0, Math.PI*2); ctx.fill();
+    }
+  }
+  downloadCanvas(c, 'explosion.png');
+})();
+
+document.body.insertAdjacentHTML('afterbegin',
+  '<p style="color:#ffcc44">✓ Download links generated above. Save all PNGs to <code>assets/images/</code>, then open <code>index.html</code>.</p>');
+</script>
+</body>
+</html>
